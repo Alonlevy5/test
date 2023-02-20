@@ -7,20 +7,38 @@ from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email.utils import COMMASPACE
 from email import encoders
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException
+import undetected_chromedriver as uc
 
-# Function to extract the XXX value from the ads.txt file for a domain
+# Set up the Selenium webdriver
+options = webdriver.ChromeOptions()
+options.add_argument("--ignore-certificate-errors")
+options.add_argument("--ignore-ssl-errors")
+options.headless = False
+
+driver = uc.Chrome(options=options)
 
 
+# Function to extract the XXX value from the ads.txt file for a domain using Selenium
 def extract_value(domain):
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'
-        }
-        response = requests.get(
-            f"https://www.{domain}/ads.txt", headers=headers)
-        if response.status_code == 404:
-            return "NA"
-        response_text = response.text.lower()
+        # Load the ads.txt page for the domain in the browser
+        driver.get(f"https://{domain}/ads.txt")
+
+        # Wait for the page to load and find the element that contains the text of the page
+        wait = WebDriverWait(driver, 8)
+        element = wait.until(
+            EC.presence_of_element_located((By.TAG_NAME, "pre")))
+
+        # Extract the text of the page and convert to lowercase
+        response_text = element.text.lower()
+
+        # Split the text into lines and look for the relevant line with the XXX value
         lines = response_text.split("\n")
         xxx_list = []
         for line in lines:
@@ -28,21 +46,30 @@ def extract_value(domain):
                 line = line.replace(" ", "")
                 if "#" in line:
                     line = line[:line.index("#")]
-                truvid, xxx, direct = line.split(",")
-                xxx_list.append(xxx)
+                try:
+                    truvid, xxx, direct = line.split(",")
+                    xxx_list.append(xxx)
+                except ValueError:
+                    return "Err"
         if len(xxx_list) == 0:
             return "Missing"
         elif len(xxx_list) == 1:
             return xxx_list[0]
         else:
             return xxx_list
-    except requests.exceptions.RequestException:
-        return "Err"
+    except:
+        # If there is any other exception, check if it's a 404 error and return "NA"
+        status_code = requests.get(f"https://{domain}/ads.txt").status_code
+        if status_code == 404:
+            return "NA"
+        else:
+            return "Err"
 
 
 # Define the list of domains
 domains = ["unotv.com", "cnn.com", "aseannow.com", "calcalist.co.il", "rionegro.com.ar",
            "inf.news", "gametimeprime.com", "full-novel.com", "shichengbbs.com", "fastnovels.net"]
+
 
 # Initialize the data list
 data = []
@@ -66,7 +93,7 @@ with open("data.csv", "w", newline="") as f:
 
 sender = "truvidtest123@gmail.com"
 password = "rgstecazspugyszi"
-recipients = ["Ron@truvid.com"]
+recipients = ["ron@truvid.com"]
 subject = "Values for Domains"
 body = "Please find the attached files containing the values for the specified domains."
 files = ["data.json", "data.csv"]
